@@ -1,5 +1,9 @@
 import org.ejml.simple.SimpleMatrix;
 
+import java.io.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Random;
 
 public class NeuralNetwork {
@@ -13,7 +17,7 @@ public class NeuralNetwork {
     double res;
     double meanErr;
 
-    double learningRate = 0.25;
+    double learningRate = 1.;
 
     static double [][] X = {
             {0., 0.},
@@ -22,10 +26,13 @@ public class NeuralNetwork {
             {1., 1.}
     };
     static double [][] Y = {
-            {0., 0.5},{1., 0.7},{1., 0.2},{0., 0.3}
+            {0.},{1.},{1.},{0.}
     };
     static double[][] testX = {
-            {0., 0.}, {0., 1.}, {1., 0.}, {1., 1.}
+            {0., 0.},
+            {0., 1.},
+            {1., 0.},
+            {1., 1.}
     };
     static double[][] testY = {
             {0.},{1.},{1.},{0.}
@@ -33,18 +40,21 @@ public class NeuralNetwork {
 
     public static void main(String[] args) {
         long t1 = System.nanoTime();
-        NeuralNetwork neuralNetwork = new NeuralNetwork(2, 4, 1);
-        neuralNetwork.train(X, Y, 100_000_000);
+        NeuralNetwork neuralNetwork = new NeuralNetwork(2, 5, 1);
+        neuralNetwork.train(X, Y, 1_000_001);
         long t2 = System.nanoTime();
         System.out.println("Time: " + (t2 - t1) / 1_000_000 + " ms");
-        neuralNetwork.test(testX, testY);
+        neuralNetwork.test(testX, testY, true);
     }
 
-    private void test(double[][] testX, double[][] testY) {
+    private void test(double[][] testX, double[][] testY, boolean output) {
+        meanErr = 0.;
         for (int i = 0; i < testX.length; i++) {
             check(testX[i], testY[i]);
         }
-        System.out.println("MeanError: " + meanErr);
+        if (output) {
+            System.out.println("MeanError: " + meanErr);
+        }
     }
 
     public NeuralNetwork(int input, int hidden, int output) {
@@ -74,30 +84,37 @@ public class NeuralNetwork {
     }
 
     private void check(double[] X, double[] Y) {
-        SimpleMatrix input = new SimpleMatrix(new double[][]{X}).transpose();
-        //SimpleMatrix output = new SimpleMatrix(new double[][]{Y}).transpose();
-        double y = Y[0] * 45.;
-        SimpleMatrix sumHidden = weightsHidden.mult(input).plus(biasHidden);
-        hiddenOut = sigmoid(sumHidden); // 2x1
-        //SimpleMatrix sumOut = weightsOut.mult(hiddenOut).plus(biasOut); // 1x2 * 2x1 + 1x1
-        double sum = weightsOut.mult(hiddenOut).plus(biasOut).get(0, 0);
-        double out = sigm(sum) * 45.;
-        res = out;
-        double err = out - y;
+        // forward
+        SimpleMatrix input = new SimpleMatrix(new double[][]{X}).transpose(); // T(1xINP) = INPx1
+        SimpleMatrix sumHidden = weightsHidden.mult(input).plus(biasHidden); // HIDxINP * INPx1 + HIDx1 = HIDx1
+        hiddenOut = sigmoid(sumHidden); // HIDx1
+        SimpleMatrix sumOut = weightsOut.mult(hiddenOut).plus(biasOut); // OUTxHID * HIDx1 + OUTx1
+        SimpleMatrix out = sigmoid(sumOut);
+        res = out.get(0, 0);
+        double y = Y[0];
+        double err = res - y;
         //String.format()
-        System.out.println("Res: " + out + " y: " + y + " Err: " + err);
+        //System.out.println("Res: " + out + " y: " + y + " Err: " + err);
         meanErr += Math.abs(err);
     }
 
     private void train(double[][] X, double[][] Y, int numberOfEpochs) {
         Random random = new Random();
-        for (int i = 0; i < numberOfEpochs; i++) {
-            int n = random.nextInt(X.length);
-            run(X[n], Y[n]);
-            if (i % (numberOfEpochs/10) == 0) {
-                System.out.println("Epoch: " + i);
-                System.out.println("Res: " + res + " Original: " + Y[n][0]);
+        try {
+            BufferedWriter bf = new BufferedWriter(new FileWriter("E:\\p\\epoch.txt"));
+            for (int i = 0; i < numberOfEpochs; i++) {
+                int n = random.nextInt(X.length);
+                run(X[n], Y[n]);
+                if (i % (numberOfEpochs/20) == 0) {
+                    System.out.println("Epoch: " + i);
+                    System.out.println("Res: " + res + " Original: " + Y[n][0]);
+                    test(testX, testY, false);
+                    bf.write(i + " " + meanErr + "\n");
+                }
             }
+            bf.close();
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 
@@ -108,6 +125,7 @@ public class NeuralNetwork {
         hiddenOut = sigmoid(sumHidden); // HIDx1
         SimpleMatrix sumOut = weightsOut.mult(hiddenOut).plus(biasOut); // OUTxHID * HIDx1 + OUTx1
         SimpleMatrix out = sigmoid(sumOut);
+        res = out.get(0, 0);
         // back
         // out
         SimpleMatrix y = new SimpleMatrix(new double[][]{Y}).transpose(); // T(1xOUT) = OUTx1
@@ -149,7 +167,33 @@ public class NeuralNetwork {
         return new SimpleMatrix(result);
     }
 
-    private double sigm(double x) {
+    private double sigmoid(double x) {
         return 1. / (1. + Math.exp(-x)); // 1 / (1 + e^-x)
+    }
+
+    private static double[][] readArrayFromFile(String fileName) {
+        double[][] result = new double[0][0];
+        try {
+            FileReader filereader = new FileReader(fileName);
+            BufferedReader bufferedreader = new BufferedReader(filereader);
+            String line = bufferedreader.readLine();
+            List<String> lines = new ArrayList<String>();
+            //While we have read in a valid line
+            while (line != null) {
+                //Try to parse integer from the String line
+                lines.add(line);
+                line = bufferedreader.readLine();
+            }
+            result = new double[lines.size()][];
+            for (int i = 0; i < lines.size(); i++) {
+                double[] doubleValues = Arrays.stream(lines.get(i).split("\\s+"))
+                        .mapToDouble(Double::parseDouble)
+                        .toArray();
+                result[i] = doubleValues;
+            }
+        } catch(Exception e ) {
+            e.printStackTrace();
+        }
+        return result;
     }
 }
