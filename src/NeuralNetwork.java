@@ -18,7 +18,6 @@ public class NeuralNetwork {
 
     static ActivationFunction af = new SigmoidActivationFunction();
 
-    double res;
     double sumError = Double.MAX_VALUE;
     double meanError = Double.MAX_VALUE;
 
@@ -28,37 +27,83 @@ public class NeuralNetwork {
 
     public static void main(String[] args) {
         long t1 = System.nanoTime();
-        NeuralNetwork neuralNetwork = new NeuralNetwork(2, 5, 1);
-        double[][] data = readArrayFromFile("E:\\p\\Data\\train.dat");
-        System.out.println(Arrays.deepToString(data));
-        double[] coefficients = {50., 100., 45.}; //findCoefficientsForNormalization(data);
-        double[][] normalizedData = normalize(data, coefficients);
-        Pair pairOfArrays = split(normalizedData, 2);
-        X = (double[][]) pairOfArrays.obj1;
-        Y = (double[][]) pairOfArrays.obj2;
-
-        data = readArrayFromFile("E:\\p\\Data\\test.dat");
-        System.out.println(Arrays.deepToString(data));
-        normalizedData = normalize(data, coefficients);
-        pairOfArrays = split(normalizedData, 2);
-        testX = (double[][]) pairOfArrays.obj1;
-        testY = (double[][]) pairOfArrays.obj2;
-
-        neuralNetwork.train(X, Y, 20_000_001, 0.001);
+        //testRun();
+        fillMNISTdata();
+        NeuralNetwork neuralNetwork = new NeuralNetwork(784, 80, 10);
+        neuralNetwork.train(X, Y, 10_000_001, 1E-20);
         long t2 = System.nanoTime();
         System.out.println("Time: " + (t2 - t1) / 1_000_000 + " ms");
         neuralNetwork.test(testX, testY, true);
     }
 
+    private static void fillTestData() {
+        double[][] data = readArrayFromFile("E:\\p\\Data\\train.dat", "\\s+");
+        double[] coefficients = {50., 100., 45.}; //findCoefficientsForNormalization(data);
+        double[][] normalizedData = normalize(data, coefficients);
+        Pair pairOfArrays = split(normalizedData, 2);
+        Y = (double[][]) pairOfArrays.obj2;
+        X = (double[][]) pairOfArrays.obj1;
+        System.out.println(Arrays.toString(Y[0]));
+        System.out.println(Arrays.toString(Y[1]));
+        System.out.println(Arrays.toString(Y[2]));
+
+        data = readArrayFromFile("E:\\p\\Data\\test.dat", "\\s+");
+        //data = readArrayFromFile("E:\\p\\Data\\mnist_test.csv", ",");
+        normalizedData = normalize(data, coefficients);
+        pairOfArrays = split(normalizedData, 2);
+        testX = (double[][]) pairOfArrays.obj1;
+        testY = (double[][]) pairOfArrays.obj2;
+    }
+
+    private static void fillMNISTdata() {
+        double[][] data = readArrayFromFile("E:\\p\\Data\\mnist_train.csv", ",");
+        System.out.println(data.length + " " + data[0].length);
+        double[] coefficients = new double[785];
+        coefficients[0] = 1.;
+        for (int i = 1; i < coefficients.length; i++) {
+            coefficients[i] = 255.;
+        }
+        double[][] normalizedData = normalize(data, coefficients);
+        Pair pairOfArrays = split(normalizedData, 1);
+        Y = (double[][]) pairOfArrays.obj1;
+        X = (double[][]) pairOfArrays.obj2;
+        double[][] tempY = new double[60000][10];
+        for (int i = 0; i < tempY.length; i++) {
+            int index = (int) Y[i][0];
+            tempY[i][index] = 1.;
+        }
+        Y = tempY;
+        System.out.println(Arrays.toString(Y[0]));
+        System.out.println(Arrays.toString(Y[1]));
+        System.out.println(Arrays.toString(Y[2]));
+
+        data = readArrayFromFile("E:\\p\\Data\\mnist_test.csv", ",");
+        normalizedData = normalize(data, coefficients);
+        pairOfArrays = split(normalizedData, 1);
+        testX = (double[][]) pairOfArrays.obj2;
+        testY = (double[][]) pairOfArrays.obj1;
+        tempY = new double[10000][10];
+        for (int i = 0; i < tempY.length; i++) {
+            int index = (int) Y[i][0];
+            tempY[i][index] = 1.;
+        }
+        testY = tempY;
+    }
+
     private void test(double[][] testX, double[][] testY, boolean output) {
         sumError = 0.;
-        for (int i = 0; i < testX.length; i++) {
-            check(testX[i], testY[i]);
-        }
-        meanError = sumError / (double) testX.length;
-        if (output) {
-            System.out.println("MeanError: " + meanError);
-        }
+        try {
+            BufferedWriter bf = new BufferedWriter(new FileWriter("E:\\p\\Data\\check.txt"));
+            for (int i = 0; i < testY.length; i++) {
+                bf.write(Arrays.toString(testY[i]) + " ");
+                bf.write(Arrays.toString(check(testX[i], testY[i])) + "\n");
+            }
+            meanError = sumError / (double) testX.length / 2.;
+            if (output) {
+                System.out.println("MeanError: " + meanError);
+            }
+            bf.close();
+        } catch (IOException ignored) { }
     }
 
     public NeuralNetwork(int input, int hidden, int output) {
@@ -89,17 +134,26 @@ public class NeuralNetwork {
         }
     }
 
-    private void check(double[] X, double[] Y) {
+    private double[] check(double[] X, double[] Y) {
         // forward
         SimpleMatrix input = new SimpleMatrix(new double[][]{X}).transpose(); // T(1xINP) = INPx1
         SimpleMatrix sumHidden = weightsHidden.mult(input).plus(biasHidden); // HIDxINP * INPx1 + HIDx1 = HIDx1
         hiddenOut = af.f(sumHidden); // HIDx1
         SimpleMatrix sumOut = weightsOut.mult(hiddenOut).plus(biasOut); // OUTxHID * HIDx1 + OUTx1
         SimpleMatrix out = af.f(sumOut);
+        double[] result = new double[out.numRows()];
+        for (int i = 0; i < result.length; i++) {
+            result[i] = out.get(i, 0);
+        }
+        /*
         res = out.get(0, 0);
         double y = Y[0];
-        double err = res - y;
-        sumError += Math.abs(err);
+         */
+        SimpleMatrix y = new SimpleMatrix(new double[][]{Y}).transpose(); // T(1xOUT) = OUTx1
+        SimpleMatrix error = out.minus(y); // OUTx1 - OUTx1 = OUTx1
+        sumError = error.elementPower(2).elementSum() / (2. * error.numRows());
+        //sumError += Math.abs(err);
+        return result;
     }
 
     private void train(double[][] X, double[][] Y, int numberOfEpochs, double meanEr) {
@@ -109,9 +163,11 @@ public class NeuralNetwork {
             for (int i = 0; i < numberOfEpochs && meanError > meanEr; i++) {
                 int n = random.nextInt(X.length);
                 run(X[n], Y[n]);
-                if (i % (numberOfEpochs/25) == 0) {
+                if (i % (numberOfEpochs/1000) == 0) {
                     System.out.println("Epoch: " + i + "\tMean Error: " + meanError);
-                    test(testX, testY, false);
+                    //test(testX, testY, false);
+                    //System.out.println(Arrays.toString(X[n]));
+                    //System.out.println(Arrays.toString(Y[n]));
                     bf.write(i + " " + meanError + "\n");
                 }
             }
@@ -128,11 +184,12 @@ public class NeuralNetwork {
         hiddenOut = af.f(sumHidden); // HIDx1
         SimpleMatrix sumOut = weightsOut.mult(hiddenOut).plus(biasOut); // OUTxHID * HIDx1 + OUTx1
         SimpleMatrix out = af.f(sumOut);
-        res = out.get(0, 0);
+        //res = out.get(0, 0);
         // back
         // out
         SimpleMatrix y = new SimpleMatrix(new double[][]{Y}).transpose(); // T(1xOUT) = OUTx1
         SimpleMatrix error = out.minus(y); // OUTx1 - OUTx1 = OUTx1
+        meanError = error.elementPower(2).elementSum() / (2. * error.numRows());
         SimpleMatrix gradOut = error.elementMult(af.dfOut(out)); // OUTx1 .* OUTx1 = OUTx1
         SimpleMatrix deltaWeightsOut = gradOut.mult(hiddenOut.transpose()).scale(learningRate); // OUTx1 * T(HIDx1) = OUTxHID
         weightsOut = weightsOut.minus(deltaWeightsOut); // OUTxHID - OUTxHID = OUTxHID
@@ -145,7 +202,7 @@ public class NeuralNetwork {
         biasHidden = biasHidden.minus(gradHidden.scale(learningRate)); // HIDx1 - HIDx1 = HIDx1
     }
 
-    private static double[][] readArrayFromFile(String fileName) {
+    private static double[][] readArrayFromFile(String fileName, String regExSep) {
         double[][] result = new double[0][0];
         try {
             FileReader filereader = new FileReader(fileName);
@@ -160,7 +217,7 @@ public class NeuralNetwork {
             }
             result = new double[lines.size()][];
             for (int i = 0; i < lines.size(); i++) {
-                double[] doubleValues = Arrays.stream(lines.get(i).split("\\s+"))
+                double[] doubleValues = Arrays.stream(lines.get(i).split(regExSep))
                         .mapToDouble(Double::parseDouble)
                         .toArray();
                 result[i] = doubleValues;
