@@ -27,9 +27,6 @@ public class NeuralNetwork {
     static double [][] X, Y, testX, testY;
 
     public static void main(String[] args) {
-        for (double i = -7.; i < 100.; i += 0.1) {
-            System.out.println(i + " " + af.f(i) + " " + af.df(i));
-        }
         long t1 = System.nanoTime();
         NeuralNetwork neuralNetwork = new NeuralNetwork(2, 5, 1);
         double[][] data = readArrayFromFile("E:\\p\\Data\\train.dat");
@@ -47,7 +44,7 @@ public class NeuralNetwork {
         testX = (double[][]) pairOfArrays.obj1;
         testY = (double[][]) pairOfArrays.obj2;
 
-        neuralNetwork.train(X, Y, 2_000_001, 0.001);
+        neuralNetwork.train(X, Y, 20_000_001, 0.001);
         long t2 = System.nanoTime();
         System.out.println("Time: " + (t2 - t1) / 1_000_000 + " ms");
         neuralNetwork.test(testX, testY, true);
